@@ -6,3 +6,6 @@ output
 *.py
 wormhole
 *.png
+output
+trace
+tmp
