@@ -4,6 +4,7 @@
 #include "cimg.h"
 
 using namespace cimg_library;
+typedef CImg<unsigned char> Img;
 
 // Structure to hold non-zero Christoffel symbols
 typedef struct
@@ -121,7 +122,7 @@ int rgb(unsigned char red, unsigned char green, unsigned char blue)
     return (red << 16) | (green << 8) | blue;
 }
 
-int pixel(CImg<unsigned char> *image, const int x, const int y)
+int pixel(Img *image, const int x, const int y)
 {
     unsigned char red = (*image)(x, y, 0, 0);
     unsigned char green = (*image)(x, y, 0, 1);
@@ -149,7 +150,10 @@ double clamp(double value, double min, double max)
     return fmax(min, fmin(value, max));
 }
 
-int map_coordinates_to_pixel(double r, double theta, double phi, CImg<unsigned char> *space1, CImg<unsigned char> *space2)
+int map_coordinates_to_pixel(
+    double r, double theta, double phi,
+    double th0, double ph0,
+    Img *space1, Img *space2)
 {
     const auto &space = r > 0 ? space1 : space2;
     const int width = space->width();
@@ -172,16 +176,16 @@ int map_coordinates_to_pixel(double r, double theta, double phi, CImg<unsigned c
 }
 
 // Trace geodesic and return a color value
-int trace_geodesic(
-    double *state, double dt, int tmax, double b,
-    CImg<unsigned char> *space1, CImg<unsigned char> *space2)
+int trace_geodesic(double *state, double dt, int tmax, double b, Img *space1, Img *space2)
 {
+    double th0 = state[2];
+    double ph0 = state[3];
     int steps = (int)(tmax / dt);
     for (int i = 0; i < steps; i++)
     {
         rk4_step(state, dt, b);
     }
-    return map_coordinates_to_pixel(state[1], state[2], state[3], space1, space2);
+    return map_coordinates_to_pixel(state[1], state[2], state[3], th0, ph0, space1, space2);
 }
 
 // Makes the initial state for RK4 integration
@@ -274,9 +278,9 @@ int main()
     double state[8];
     double c_r, c_th, c_ph;
 
-    CImg<unsigned char> space1("space1.jpg");
-    CImg<unsigned char> space2("space2.jpg");
-    CImg<unsigned char> image(W, H, 1, 3, 0);
+    Img space1("space1.jpg");
+    Img space2("space2.jpg");
+    Img image(W, H, 1, 3, 0);
 
     init_camera_basis(th0, ph0, e_r, e_th, e_ph);
 
