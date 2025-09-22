@@ -50,23 +50,22 @@ void rhs(const double *state, double b, double *result)
     Christoffels gamma;
     christoffels(r, b, th, &gamma);
 
-    // Compute acceleration components using precomputed Christoffel symbols
-    // Γ^r_{θθ} = -r
+    // Γ^r_{θθ}
     a[1] -= gamma.gamma_1_2_2 * v[2] * v[2];
 
-    // Γ^r_{φφ} = -r sin^2(θ)
+    // Γ^r_{φφ}
     a[1] -= gamma.gamma_1_3_3 * v[3] * v[3];
 
-    // Γ^θ_{rθ} = Γ^θ_{θr} = Γ^φ_{rφ} = Γ^φ_{φr} = r / (b^2+r^2)
+    // Γ^θ_{rθ} = Γ^θ_{θr} = Γ^φ_{rφ} = Γ^φ_{φr}
     a[2] -= gamma.gamma_2_1_2 * v[1] * v[2];
     a[2] -= gamma.gamma_2_1_2 * v[2] * v[1];
     a[3] -= gamma.gamma_2_1_2 * v[1] * v[3];
     a[3] -= gamma.gamma_2_1_2 * v[3] * v[1];
 
-    // Γ^θ_{φφ} = -sinθcosθ
+    // Γ^θ_{φφ}
     a[2] -= gamma.gamma_2_3_3 * v[3] * v[3];
 
-    // Γ^φ_{θφ} = Γ^φ_{φθ} = cotθ
+    // Γ^φ_{θφ} = Γ^φ_{φθ}
     a[3] -= gamma.gamma_3_2_3 * v[2] * v[3];
     a[3] -= gamma.gamma_3_2_3 * v[3] * v[2];
 
@@ -173,7 +172,9 @@ int map_coordinates_to_pixel(double r, double theta, double phi, CImg<unsigned c
 }
 
 // Trace geodesic and return a color value
-int trace(double *state, double dt, int tmax, double b, CImg<unsigned char> *space1, CImg<unsigned char> *space2)
+int trace_geodesic(
+    double *state, double dt, int tmax, double b,
+    CImg<unsigned char> *space1, CImg<unsigned char> *space2)
 {
     int steps = (int)(tmax / dt);
     for (int i = 0; i < steps; i++)
@@ -190,28 +191,24 @@ void init_state(
     double *state)
 {
     double R = sqrt(r0 * r0 + b * b);
-
-    // coordinate rates from orthonormal components
-    double rd = c_r;
-    double thd = c_th / R;
-
-    double s = sin(th0);
-    if (s < 1e-9)
-        s = 1e-9;
-
-    double phd = c_ph / (R * s);
+    double S = sin(th0);
+    if (S < 1e-9)
+        S = 1e-9;
 
     // null normalization: choose t' so that k^μ k_μ = 0 → t'^2 = r'^2 + R^2(θ'^2 + sin^2θ φ'^2)
-    double td = sqrt(rd * rd + R * R * (thd * thd + (s * s) * phd * phd));
+    double vr = c_r;
+    double vth = c_th / R;
+    double vph = c_ph / (R * S);
+    double vt = sqrt(vr * vr + R * R * (vth * vth + (S * S) * vph * vph));
 
     state[0] = 0.0;
     state[1] = r0;
     state[2] = th0;
     state[3] = ph0;
-    state[4] = td;
-    state[5] = rd;
-    state[6] = thd;
-    state[7] = phd;
+    state[4] = vt;
+    state[5] = vr;
+    state[6] = vth;
+    state[7] = vph;
 }
 
 // Build a normalized view ray in local basis and return its components along e_r, e_th, e_ph
@@ -236,7 +233,7 @@ void pixel_to_local(
     d[2] /= L;
 
     // components in the local orthonormal frame
-    *c_r = d[0] * e_r[0] + d[1] * e_r[1] + d[2] * e_r[2]; // should be negative (pointing inward)
+    *c_r = d[0] * e_r[0] + d[1] * e_r[1] + d[2] * e_r[2];
     *c_th = d[0] * e_th[0] + d[1] * e_th[1] + d[2] * e_th[2];
     *c_ph = d[0] * e_ph[0] + d[1] * e_ph[1] + d[2] * e_ph[2];
 }
@@ -289,7 +286,7 @@ int main()
         {
             pixel_to_local(i, j, W, H, fov, e_r, e_th, e_ph, &c_r, &c_th, &c_ph);
             init_state(r0, th0, ph0, b, c_r, c_th, c_ph, state);
-            int rgb = trace(state, dt, tmax, b, &space1, &space2);
+            int rgb = trace_geodesic(state, dt, tmax, b, &space1, &space2);
             image(j, i, 0, 0) = red(rgb);
             image(j, i, 0, 1) = green(rgb);
             image(j, i, 0, 2) = blue(rgb);
