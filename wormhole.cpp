@@ -217,20 +217,21 @@ void pixel_to_local(
     const double e_r[3], const double e_th[3], const double e_ph[3],
     double *c_r, double *c_th, double *c_ph)
 {
-    // pixel → normalized screen offsets (u: right, v: up)
+    // pixel to normalized screen offsets (u: right, v: up)
     double u = ((j + 0.5) / W - 0.5) * 2.0 * tan(fov / 2.0);
     double v = (0.5 - (i + 0.5) / H) * 2.0 * tan(fov / 2.0) * ((double)H / W);
 
-    // pinhole ray in world coords
-    double d[3] = {-e_r[0] + u * e_ph[0] + v * e_th[0],
-                   -e_r[1] + u * e_ph[1] + v * e_th[1],
-                   -e_r[2] + u * e_ph[2] + v * e_th[2]};
+    // ray in wormhole coordinates
+    double d[3] = {
+        -e_r[0] + u * e_ph[0] + v * e_th[0],
+        -e_r[1] + u * e_ph[1] + v * e_th[1],
+        -e_r[2] + u * e_ph[2] + v * e_th[2]};
 
-    // normalize
-    double L = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-    d[0] /= L;
-    d[1] /= L;
-    d[2] /= L;
+    // normalize direction vector
+    double norm = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    d[0] /= norm;
+    d[1] /= norm;
+    d[2] /= norm;
 
     // components in the local orthonormal frame
     *c_r = d[0] * e_r[0] + d[1] * e_r[1] + d[2] * e_r[2];
