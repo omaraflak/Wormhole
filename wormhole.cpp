@@ -310,8 +310,8 @@ int main()
     // const int W = 1920, H = 1080;
     // const int W = 3840, H = 2160;
 
-    Img space1("space5.jpg");
-    Img space2("space1.jpg");
+    Img space1("images/space5.jpg");
+    Img space2("images/space1.jpg");
     Img image(W, H, 1, 3, 0);
 
     ThreadPool pool(50);
@@ -323,5 +323,5 @@ int main()
     }
 
     pool.wait_idle();
-    image.save_png("wormhole.png");
+    image.save_png("output/wormhole.png");
 }

@@ -3,9 +3,5 @@ __pycache__
 .venv
 .vscode
 output
-*.py
-wormhole
-*.png
-output
-trace
 tmp
+wormhole
