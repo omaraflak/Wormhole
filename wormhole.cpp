@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "cimg.h"
+#include "pool.h"
 
 using namespace cimg_library;
 typedef CImg<unsigned char> Img;
@@ -117,7 +118,7 @@ void rk4_step(double *state, double dt, double b)
     }
 }
 
-int rgb(unsigned char red, unsigned char green, unsigned char blue)
+inline static int rgb(unsigned char red, unsigned char green, unsigned char blue)
 {
     return (red << 16) | (green << 8) | blue;
 }
@@ -130,17 +131,17 @@ int pixel(Img *image, const int x, const int y)
     return rgb(red, green, blue);
 }
 
-unsigned char red(int rgb)
+inline static unsigned char red(int rgb)
 {
     return (rgb >> 16) & 0xff;
 }
 
-unsigned char green(int rgb)
+inline static unsigned char green(int rgb)
 {
     return (rgb >> 8) & 0xff;
 }
 
-unsigned char blue(int rgb)
+inline static unsigned char blue(int rgb)
 {
     return rgb & 0xff;
 }
@@ -158,6 +159,12 @@ int map_coordinates_to_pixel(
     const auto &space = r > 0 ? space1 : space2;
     const int width = space->width();
     const int height = space->height();
+
+    // Flip phi on the other side so we don't face the seam
+    if (r < 0)
+    {
+        phi += ph0 + M_PI;
+    }
 
     phi = fmod(phi, 2 * M_PI);
     if (phi < 0)
@@ -258,13 +265,14 @@ void init_camera_basis(double th0, double ph0, double *e_r, double *e_th, double
     e_ph[2] = 0.0;
 }
 
-int main()
+void render_row(Img *space1, Img *space2, Img *output, int col, int *progress)
 {
-    const int W = 600;
-    const int H = 300;
-    const double fov = 60 * M_PI / 180;
-    const double b = 1.0;
-    const double dt = 1e-2;
+    const int W = output->width();
+    const int H = output->height();
+
+    const double fov = 120 * M_PI / 180;
+    const double b = 3.0;
+    const double dt = 1e-3;
     const double tmax = 30.0;
 
     const double r0 = 10;
@@ -278,25 +286,42 @@ int main()
     double state[8];
     double c_r, c_th, c_ph;
 
-    Img space1("space1.jpg");
-    Img space2("space2.jpg");
+    init_camera_basis(th0, ph0, e_r, e_th, e_ph);
+
+    for (int j = 0; j < W; j++)
+    {
+        pixel_to_local(col, j, W, H, fov, e_r, e_th, e_ph, &c_r, &c_th, &c_ph);
+        init_state(r0, th0, ph0, b, c_r, c_th, c_ph, state);
+        int rgb = trace_geodesic(state, dt, tmax, b, space1, space2);
+        (*output)(j, col, 0, 0) = red(rgb);
+        (*output)(j, col, 0, 1) = green(rgb);
+        (*output)(j, col, 0, 2) = blue(rgb);
+    }
+
+    (*progress)++;
+    printf("%d/%d\n", *progress, H);
+}
+
+int main()
+{
+    // const int W = 320, H = 180;
+    const int W = 640, H = 360;
+    // const int W = 1280, H = 720;
+    // const int W = 1920, H = 1080;
+    // const int W = 3840, H = 2160;
+
+    Img space1("space5.jpg");
+    Img space2("space1.jpg");
     Img image(W, H, 1, 3, 0);
 
-    init_camera_basis(th0, ph0, e_r, e_th, e_ph);
+    ThreadPool pool(50);
+    int progress = 0;
 
     for (int i = 0; i < H; i++)
     {
-        printf("%d/%d\n", i + 1, H);
-        for (int j = 0; j < W; j++)
-        {
-            pixel_to_local(i, j, W, H, fov, e_r, e_th, e_ph, &c_r, &c_th, &c_ph);
-            init_state(r0, th0, ph0, b, c_r, c_th, c_ph, state);
-            int rgb = trace_geodesic(state, dt, tmax, b, &space1, &space2);
-            image(j, i, 0, 0) = red(rgb);
-            image(j, i, 0, 1) = green(rgb);
-            image(j, i, 0, 2) = blue(rgb);
-        }
+        pool.enqueue(&render_row, &space1, &space2, &image, i, &progress);
     }
 
+    pool.wait_idle();
     image.save_png("wormhole.png");
 }
