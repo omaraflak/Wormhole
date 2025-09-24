@@ -223,7 +223,7 @@ void init_state(
 }
 
 // Build a normalized view ray in local basis and return its components along e_r, e_th, e_ph
-void pixel_to_local(
+void pixel_to_direction(
     int i, int j, int W, int H, double fov,
     const double e_r[3], const double e_th[3], const double e_ph[3],
     double *c_r, double *c_th, double *c_ph)
@@ -290,7 +290,7 @@ void render_row(Img *space1, Img *space2, Img *output, int col, int *progress)
 
     for (int j = 0; j < W; j++)
     {
-        pixel_to_local(col, j, W, H, fov, e_r, e_th, e_ph, &c_r, &c_th, &c_ph);
+        pixel_to_direction(col, j, W, H, fov, e_r, e_th, e_ph, &c_r, &c_th, &c_ph);
         init_state(r0, th0, ph0, b, c_r, c_th, c_ph, state);
         int rgb = trace_geodesic(state, dt, tmax, b, space1, space2);
         (*output)(j, col, 0, 0) = red(rgb);
