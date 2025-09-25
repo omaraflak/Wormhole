@@ -1,3 +1,5 @@
+#include <iostream>
+#include <string.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,18 +13,18 @@ typedef CImg<unsigned char> Img;
 typedef struct
 {
     // t=0,r=1,θ=2,φ=3
-    double gamma_1_2_2;
-    double gamma_1_3_3;
-    double gamma_2_1_2;
-    double gamma_2_3_3;
-    double gamma_3_2_3;
+    float gamma_1_2_2;
+    float gamma_1_3_3;
+    float gamma_2_1_2;
+    float gamma_2_3_3;
+    float gamma_3_2_3;
 } Christoffels;
 
 // Compute Christoffel symbols
-void christoffels(double r, double b, double theta, Christoffels *gamma)
+void christoffels(float r, float b, float theta, Christoffels *gamma)
 {
-    double cos_theta = cos(theta);
-    double sin_theta = sin(theta);
+    float cos_theta = cos(theta);
+    float sin_theta = sin(theta);
 
     // Γ^r_{θθ} = -r
     gamma->gamma_1_2_2 = -r;
@@ -41,13 +43,13 @@ void christoffels(double r, double b, double theta, Christoffels *gamma)
 }
 
 // Right-hand side of differential equation
-void rhs(const double *state, double b, double *result)
+void rhs(const float *state, float b, float *result)
 {
     // State = [t, r, θ, φ, t', r', θ', φ']
-    double t = state[0], r = state[1], th = state[2], ph = state[3];
-    double vt = state[4], vr = state[5], vth = state[6], vph = state[7];
-    double v[4] = {vt, vr, vth, vph};
-    double a[4] = {0.0, 0.0, 0.0, 0.0};
+    float t = state[0], r = state[1], th = state[2], ph = state[3];
+    float vt = state[4], vr = state[5], vth = state[6], vph = state[7];
+    float v[4] = {vt, vr, vth, vph};
+    float a[4] = {0.0, 0.0, 0.0, 0.0};
 
     Christoffels gamma;
     christoffels(r, b, th, &gamma);
@@ -82,10 +84,10 @@ void rhs(const double *state, double b, double *result)
 }
 
 // Runge-Kutta 4th order step
-void rk4_step(double *state, double dt, double b)
+void rk4_step(float *state, float dt, float b)
 {
-    double k1[8], k2[8], k3[8], k4[8];
-    double temp_state[8];
+    float k1[8], k2[8], k3[8], k4[8];
+    float temp_state[8];
 
     // k1 = rhs(state, b)
     rhs(state, b, k1);
@@ -146,14 +148,14 @@ inline static unsigned char blue(int rgb)
     return rgb & 0xff;
 }
 
-double clamp(double value, double min, double max)
+float clamp(float value, float min, float max)
 {
     return fmax(min, fmin(value, max));
 }
 
 int map_coordinates_to_pixel(
-    double r, double theta, double phi,
-    double th0, double ph0,
+    float r, float theta, float phi,
+    float th0, float ph0,
     Img *space1, Img *space2)
 {
     const auto &space = r > 0 ? space1 : space2;
@@ -174,8 +176,8 @@ int map_coordinates_to_pixel(
 
     theta = clamp(theta, 0.0, M_PI);
 
-    double x = (phi / (2.0 * M_PI)) * (width - 1.0);
-    double y = (theta / M_PI) * (height - 1.0);
+    float x = (phi / (2.0 * M_PI)) * (width - 1.0);
+    float y = (theta / M_PI) * (height - 1.0);
 
     x = clamp(x, 0, width - 1);
     y = clamp(y, 0, height - 1);
@@ -183,10 +185,10 @@ int map_coordinates_to_pixel(
 }
 
 // Trace geodesic and return a color value
-int trace_geodesic(double *state, double dt, int tmax, double b, Img *space1, Img *space2)
+int trace_geodesic(float *state, float dt, int tmax, float b, Img *space1, Img *space2)
 {
-    double th0 = state[2];
-    double ph0 = state[3];
+    float th0 = state[2];
+    float ph0 = state[3];
     int steps = (int)(tmax / dt);
     for (int i = 0; i < steps; i++)
     {
@@ -197,20 +199,20 @@ int trace_geodesic(double *state, double dt, int tmax, double b, Img *space1, Im
 
 // Makes the initial state for RK4 integration
 void init_state(
-    double r0, double th0, double ph0, double b,
-    double c_r, double c_th, double c_ph,
-    double *state)
+    float r0, float th0, float ph0, float b,
+    float c_r, float c_th, float c_ph,
+    float *state)
 {
-    double R = sqrt(r0 * r0 + b * b);
-    double S = sin(th0);
+    float R = sqrt(r0 * r0 + b * b);
+    float S = sin(th0);
     if (S < 1e-9)
         S = 1e-9;
 
     // null normalization: choose t' so that k^μ k_μ = 0 → t'^2 = r'^2 + R^2(θ'^2 + sin^2θ φ'^2)
-    double vr = c_r;
-    double vth = c_th / R;
-    double vph = c_ph / (R * S);
-    double vt = sqrt(vr * vr + R * R * (vth * vth + (S * S) * vph * vph));
+    float vr = c_r;
+    float vth = c_th / R;
+    float vph = c_ph / (R * S);
+    float vt = sqrt(vr * vr + R * R * (vth * vth + (S * S) * vph * vph));
 
     state[0] = 0.0;
     state[1] = r0;
@@ -224,22 +226,22 @@ void init_state(
 
 // Build a normalized view ray in local basis and return its components along e_r, e_th, e_ph
 void pixel_to_direction(
-    int i, int j, int W, int H, double fov,
-    const double e_r[3], const double e_th[3], const double e_ph[3],
-    double *c_r, double *c_th, double *c_ph)
+    int i, int j, int W, int H, float fov,
+    const float e_r[3], const float e_th[3], const float e_ph[3],
+    float *c_r, float *c_th, float *c_ph)
 {
     // pixel to normalized screen offsets (u: right, v: up)
-    double u = ((j + 0.5) / W - 0.5) * 2.0 * tan(fov / 2.0);
-    double v = (0.5 - (i + 0.5) / H) * 2.0 * tan(fov / 2.0) * ((double)H / W);
+    float u = ((j + 0.5) / W - 0.5) * 2.0 * tan(fov / 2.0);
+    float v = (0.5 - (i + 0.5) / H) * 2.0 * tan(fov / 2.0) * ((float)H / W);
 
     // ray in wormhole coordinates
-    double d[3] = {
+    float d[3] = {
         -e_r[0] + u * e_ph[0] + v * e_th[0],
         -e_r[1] + u * e_ph[1] + v * e_th[1],
         -e_r[2] + u * e_ph[2] + v * e_th[2]};
 
     // normalize direction vector
-    double norm = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    float norm = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
     d[0] /= norm;
     d[1] /= norm;
     d[2] /= norm;
@@ -250,10 +252,10 @@ void pixel_to_direction(
     *c_ph = d[0] * e_ph[0] + d[1] * e_ph[1] + d[2] * e_ph[2];
 }
 
-void init_camera_basis(double th0, double ph0, double *e_r, double *e_th, double *e_ph)
+void init_camera_basis(float th0, float ph0, float *e_r, float *e_th, float *e_ph)
 {
-    double st = sin(th0), ct = cos(th0);
-    double sp = sin(ph0), cp = cos(ph0);
+    float st = sin(th0), ct = cos(th0);
+    float sp = sin(ph0), cp = cos(ph0);
     e_r[0] = st * cp;
     e_r[1] = st * sp;
     e_r[2] = ct;
@@ -265,37 +267,34 @@ void init_camera_basis(double th0, double ph0, double *e_r, double *e_th, double
     e_ph[2] = 0.0;
 }
 
-void render_row(Img *space1, Img *space2, Img *output, int col, int *progress)
+void render_row(Img *space1, Img *space2, Img *output, int W, int H, int row, int *progress)
 {
-    const int W = output->width();
-    const int H = output->height();
+    const float fov = 120 * M_PI / 180;
+    const float b = 3.0;
+    const float dt = 1e-3;
+    const float tmax = 30.0;
 
-    const double fov = 120 * M_PI / 180;
-    const double b = 3.0;
-    const double dt = 1e-3;
-    const double tmax = 30.0;
+    const float r0 = 10;
+    const float th0 = M_PI / 2;
+    const float ph0 = 0;
 
-    const double r0 = 10;
-    const double th0 = M_PI / 2;
-    const double ph0 = 0;
+    float e_r[3];
+    float e_th[3];
+    float e_ph[3];
 
-    double e_r[3];
-    double e_th[3];
-    double e_ph[3];
-
-    double state[8];
-    double c_r, c_th, c_ph;
+    float state[8];
+    float c_r, c_th, c_ph;
 
     init_camera_basis(th0, ph0, e_r, e_th, e_ph);
 
     for (int j = 0; j < W; j++)
     {
-        pixel_to_direction(col, j, W, H, fov, e_r, e_th, e_ph, &c_r, &c_th, &c_ph);
+        pixel_to_direction(row, j, W, H, fov, e_r, e_th, e_ph, &c_r, &c_th, &c_ph);
         init_state(r0, th0, ph0, b, c_r, c_th, c_ph, state);
         int rgb = trace_geodesic(state, dt, tmax, b, space1, space2);
-        (*output)(j, col, 0, 0) = red(rgb);
-        (*output)(j, col, 0, 1) = green(rgb);
-        (*output)(j, col, 0, 2) = blue(rgb);
+        (*output)(j, row, 0, 0) = red(rgb);
+        (*output)(j, row, 0, 1) = green(rgb);
+        (*output)(j, row, 0, 2) = blue(rgb);
     }
 
     (*progress)++;
@@ -304,24 +303,24 @@ void render_row(Img *space1, Img *space2, Img *output, int col, int *progress)
 
 int main()
 {
+    const int W = 160, H = 90;
     // const int W = 320, H = 180;
-    const int W = 640, H = 360;
+    // const int W = 640, H = 360;
     // const int W = 1280, H = 720;
     // const int W = 1920, H = 1080;
     // const int W = 3840, H = 2160;
 
     Img space1("images/space5.jpg");
     Img space2("images/space1.jpg");
-    Img image(W, H, 1, 3, 0);
+    Img output(W, H, 1, 3, 0);
 
-    ThreadPool pool(50);
+    ThreadPool pool(9);
     int progress = 0;
-
     for (int i = 0; i < H; i++)
     {
-        pool.enqueue(&render_row, &space1, &space2, &image, i, &progress);
+        pool.enqueue(&render_row, &space1, &space2, &output, W, H, i, &progress);
     }
-
     pool.wait_idle();
-    image.save_png("output/wormhole.png");
+
+    output.save_png("images/wormhole.png");
 }
