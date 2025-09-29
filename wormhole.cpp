@@ -231,6 +231,7 @@ void init_state(
 void pixel_to_direction(
     int i, int j, int W, int H, float fov,
     const float e_r[3], const float e_th[3], const float e_ph[3],
+    const float cam_r[3], const float cam_th[3], const float cam_ph[3],
     float &c_r, float &c_th, float &c_ph)
 {
     float height = 2.0 * tan(fov / 2.0);
@@ -241,9 +242,9 @@ void pixel_to_direction(
     float v = (2 * (j + 0.5) / W - 1) * width;
 
     // ray in wormhole coordinates
-    float d_r = -e_r[0] + u * e_th[0] + v * e_ph[0];
-    float d_th = -e_r[1] + u * e_th[1] + v * e_ph[1];
-    float d_ph = -e_r[2] + u * e_th[2] + v * e_ph[2];
+    float d_r = cam_r[0] + u * cam_th[0] + v * cam_ph[0];
+    float d_th = cam_r[1] + u * cam_th[1] + v * cam_ph[1];
+    float d_ph = cam_r[2] + u * cam_th[2] + v * cam_ph[2];
 
     // normalize direction vector
     float norm = sqrt(d_r * d_r + d_th * d_th + d_ph * d_ph);
@@ -257,7 +258,7 @@ void pixel_to_direction(
     c_ph = d_r * e_ph[0] + d_th * e_ph[1] + d_ph * e_ph[2];
 }
 
-void init_camera_basis(float th0, float ph0, float *e_r, float *e_th, float *e_ph)
+void init_world_basis(float th0, float ph0, float *e_r, float *e_th, float *e_ph)
 {
     float st, ct, sp, cp;
     __sincosf(th0, &st, &ct);
@@ -273,29 +274,75 @@ void init_camera_basis(float th0, float ph0, float *e_r, float *e_th, float *e_p
     e_ph[2] = 0.0;
 }
 
-void render_row(const Img &space1, const Img &space2, Img &output, int W, int H, int row, int &progress)
+void init_camera_basis(
+    float *e_r, float *e_th, float *e_ph,
+    float *cam_r, float *cam_th, float *cam_ph,
+    float r_angle, float th_angle, float ph_angle)
 {
-    const float fov = 120 * PI / 180;
-    const float b = 3.0;
-    const float dt = 5e-3;
-    const float tmax = 20.0;
+    float sr, cr;
+    float sth, cth;
+    float sph, cph;
+    __sincosf(r_angle, &sr, &cr);
+    __sincosf(th_angle, &sth, &cth);
+    __sincosf(ph_angle, &sph, &cph);
 
-    const float r0 = 3;
-    const float th0 = PI / 2;
-    const float ph0 = 0;
+    cam_r[0] = -e_r[0];
+    cam_r[1] = -e_r[1];
+    cam_r[2] = -e_r[2];
 
-    float e_r[3];
-    float e_th[3];
-    float e_ph[3];
+    cam_th[0] = -e_th[0];
+    cam_th[1] = -e_th[1];
+    cam_th[2] = -e_th[2];
+
+    cam_ph[0] = e_ph[0];
+    cam_ph[1] = e_ph[1];
+    cam_ph[2] = e_ph[2];
+
+    float cam_r_x = (cth + cph) * cam_r[0] - sph * cam_th[0] + sth * cam_ph[0];
+    float cam_r_y = (cth + cph) * cam_r[1] - sph * cam_th[1] + sth * cam_ph[1];
+    float cam_r_z = (cth + cph) * cam_r[2] - sph * cam_th[2] + sth * cam_ph[2];
+
+    float cam_th_x = sph * cam_r[0] + (cr + cph) * cam_th[0] - sr * cam_ph[0];
+    float cam_th_y = sph * cam_r[1] + (cr + cph) * cam_th[1] - sr * cam_ph[1];
+    float cam_th_z = sph * cam_r[2] + (cr + cph) * cam_th[2] - sr * cam_ph[2];
+
+    float cam_ph_x = -sth * cam_r[0] + sr * cam_th[0] + (cth + cr) * cam_ph[0];
+    float cam_ph_y = -sth * cam_r[1] + sr * cam_th[1] + (cth + cr) * cam_ph[1];
+    float cam_ph_z = -sth * cam_r[2] + sr * cam_th[2] + (cth + cr) * cam_ph[2];
+
+    cam_r[0] = cam_r_x;
+    cam_r[1] = cam_r_y;
+    cam_r[2] = cam_r_z;
+
+    cam_th[0] = cam_th_x;
+    cam_th[1] = cam_th_y;
+    cam_th[2] = cam_th_z;
+
+    cam_ph[0] = cam_ph_x;
+    cam_ph[1] = cam_ph_y;
+    cam_ph[2] = cam_ph_z;
+}
+
+void render_row(
+    const Img &space1, const Img &space2, Img &output,
+    int W, int H, int row,
+    float fov, float b, float dt, float tmax,
+    float r0, float th0, float ph0,
+    float r_ang, float th_ang, float ph_ang,
+    int &progress)
+{
+    float e_r[3], e_th[3], e_ph[3];
+    float cam_r[3], cam_th[3], cam_ph[3];
 
     State state;
     float c_r, c_th, c_ph;
 
-    init_camera_basis(th0, ph0, e_r, e_th, e_ph);
+    init_world_basis(th0, ph0, e_r, e_th, e_ph);
+    init_camera_basis(e_r, e_th, e_ph, cam_r, cam_th, cam_ph, r_ang, th_ang, ph_ang);
 
     for (int j = 0; j < W; j++)
     {
-        pixel_to_direction(row, j, W, H, fov, e_r, e_th, e_ph, c_r, c_th, c_ph);
+        pixel_to_direction(row, j, W, H, fov, e_r, e_th, e_ph, cam_r, cam_th, cam_ph, c_r, c_th, c_ph);
         init_state(r0, th0, ph0, b, c_r, c_th, c_ph, state);
         int rgb = trace_geodesic(state, dt, tmax, b, space1, space2);
         output(j, row, 0, 0) = red(rgb);
@@ -316,17 +363,33 @@ int main()
     // const int W = 1920, H = 1080;
     // const int W = 3840, H = 2160;
 
+    const float fov = 60 * PI / 180;
+    const float b = 1;
+    const float dt = 1e-3;
+    const float tmax = 20.0;
+
+    const float r0 = 3;
+    const float th0 = PI / 2;
+    const float ph0 = 0;
+
+    const float r_ang = 0;
+    const float th_ang = 0;
+    const float ph_ang = 0;
+
     Img space1("images/space5.jpg");
-    Img space2("images/space1.jpg");
+    Img space2("images/space6.png");
     Img output(W, H, 1, 3, 0);
 
     ThreadPool pool(9);
     int progress = 0;
     for (int i = 0; i < H; i++)
     {
-        pool.enqueue(&render_row, std::ref(space1), std::ref(space2), std::ref(output), W, H, i, std::ref(progress));
+        pool.enqueue(
+            &render_row,
+            std::ref(space1), std::ref(space2), std::ref(output),
+            W, H, i, fov, b, dt, tmax, r0, th0, ph0, r_ang, th_ang, ph_ang,
+            std::ref(progress));
     }
     pool.wait_idle();
-
     output.save_png("wormhole.png");
 }
