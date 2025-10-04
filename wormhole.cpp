@@ -16,19 +16,31 @@ constexpr float INV_TWO_PI = 1.0f / TWO_PI;
 typedef struct
 {
     float t;
-    float r;
+    float l;
     float th;
     float ph;
     float vt;
-    float vr;
+    float vl;
     float vth;
     float vph;
 } State;
 
+inline static float r_of_l(float l, float b)
+{
+    // return b + L * log(cosh(l / L));
+    return sqrt(l * l + b * b);
+}
+
+inline static float r_prime_of_l(float l, float b)
+{
+    // return tanh(l / L);
+    return l / sqrt(l * l + b * b);
+}
+
 // Compute Christoffel symbols
-// t=0,r=1,θ=2,φ=3
+// t=0,l=1,θ=2,φ=3
 inline static void christoffels(
-    float r,
+    float l,
     float b,
     float theta,
     float &g122,
@@ -40,14 +52,17 @@ inline static void christoffels(
     float st, ct;
     __sincosf(theta, &st, &ct);
 
-    // Γ^r_{θθ}
-    g122 = -r;
+    float r = r_of_l(l, b);
+    float rp = r_prime_of_l(l, b);
 
-    // Γ^r_{φφ}
-    g133 = -r * st * st;
+    // Γ^l_{θθ}
+    g122 = -r * rp;
 
-    // Γ^θ_{rθ} = Γ^θ_{θr} = Γ^φ_{rφ} = Γ^φ_{φr}
-    g212 = r / (b * b + r * r);
+    // Γ^l_{φφ}
+    g133 = -r * rp * st * st;
+
+    // Γ^θ_{lθ} = Γ^θ_{θl} = Γ^φ_{lφ} = Γ^φ_{φl}
+    g212 = rp / (r + 1e-12);
 
     // Γ^θ_{φφ}
     g233 = -st * ct;
@@ -60,18 +75,18 @@ inline static void christoffels(
 void rhs(const State &state, float b, State &result)
 {
     float g122, g133, g212, g233, g323;
-    christoffels(state.r, b, state.th, g122, g133, g212, g233, g323);
+    christoffels(state.l, b, state.th, g122, g133, g212, g233, g323);
 
     float ar = -g122 * state.vth * state.vth - g133 * state.vph * state.vph;
-    float ath = -2 * g212 * state.vr * state.vth - g233 * state.vph * state.vph;
-    float aph = -2 * g212 * state.vr * state.vph - 2 * g323 * state.vth * state.vph;
+    float ath = -2 * g212 * state.vl * state.vth - g233 * state.vph * state.vph;
+    float aph = -2 * g212 * state.vl * state.vph - 2 * g323 * state.vth * state.vph;
 
     result.t = state.vt;
-    result.r = state.vr;
+    result.l = state.vl;
     result.th = state.vth;
     result.ph = state.vph;
     result.vt = 0;
-    result.vr = ar;
+    result.vl = ar;
     result.vth = ath;
     result.vph = aph;
 }
@@ -84,42 +99,42 @@ void rk4_step(State &s, float dt, float b)
     rhs(s, b, k1);
 
     tmp.t = s.t + 0.5f * dt * k1.t;
-    tmp.r = s.r + 0.5f * dt * k1.r;
+    tmp.l = s.l + 0.5f * dt * k1.l;
     tmp.th = s.th + 0.5f * dt * k1.th;
     tmp.ph = s.ph + 0.5f * dt * k1.ph;
     tmp.vt = s.vt + 0.5f * dt * k1.vt;
-    tmp.vr = s.vr + 0.5f * dt * k1.vr;
+    tmp.vl = s.vl + 0.5f * dt * k1.vl;
     tmp.vth = s.vth + 0.5f * dt * k1.vth;
     tmp.vph = s.vph + 0.5f * dt * k1.vph;
     rhs(tmp, b, k2);
 
     tmp.t = s.t + 0.5f * dt * k2.t;
-    tmp.r = s.r + 0.5f * dt * k2.r;
+    tmp.l = s.l + 0.5f * dt * k2.l;
     tmp.th = s.th + 0.5f * dt * k2.th;
     tmp.ph = s.ph + 0.5f * dt * k2.ph;
     tmp.vt = s.vt + 0.5f * dt * k2.vt;
-    tmp.vr = s.vr + 0.5f * dt * k2.vr;
+    tmp.vl = s.vl + 0.5f * dt * k2.vl;
     tmp.vth = s.vth + 0.5f * dt * k2.vth;
     tmp.vph = s.vph + 0.5f * dt * k2.vph;
     rhs(tmp, b, k3);
 
     tmp.t = s.t + dt * k3.t;
-    tmp.r = s.r + dt * k3.r;
+    tmp.l = s.l + dt * k3.l;
     tmp.th = s.th + dt * k3.th;
     tmp.ph = s.ph + dt * k3.ph;
     tmp.vt = s.vt + dt * k3.vt;
-    tmp.vr = s.vr + dt * k3.vr;
+    tmp.vl = s.vl + dt * k3.vl;
     tmp.vth = s.vth + dt * k3.vth;
     tmp.vph = s.vph + dt * k3.vph;
     rhs(tmp, b, k4);
 
     const float w = dt / 6.0f;
     s.t = s.t + w * (k1.t + 2.f * k2.t + 2.f * k3.t + k4.t);
-    s.r = s.r + w * (k1.r + 2.f * k2.r + 2.f * k3.r + k4.r);
+    s.l = s.l + w * (k1.l + 2.f * k2.l + 2.f * k3.l + k4.l);
     s.th = s.th + w * (k1.th + 2.f * k2.th + 2.f * k3.th + k4.th);
     s.ph = s.ph + w * (k1.ph + 2.f * k2.ph + 2.f * k3.ph + k4.ph);
     s.vt = s.vt + w * (k1.vt + 2.f * k2.vt + 2.f * k3.vt + k4.vt);
-    s.vr = s.vr + w * (k1.vr + 2.f * k2.vr + 2.f * k3.vr + k4.vr);
+    s.vl = s.vl + w * (k1.vl + 2.f * k2.vl + 2.f * k3.vl + k4.vl);
     s.vth = s.vth + w * (k1.vth + 2.f * k2.vth + 2.f * k3.vth + k4.vth);
     s.vph = s.vph + w * (k1.vph + 2.f * k2.vph + 2.f * k3.vph + k4.vph);
 }
@@ -164,16 +179,16 @@ inline float mod2pi(float x)
 }
 
 int map_coordinates_to_pixel(
-    float r, float theta, float phi,
+    float l, float theta, float phi,
     float th0, float ph0,
     const Img &space1, const Img &space2)
 {
-    const auto &space = r > 0 ? space1 : space2;
+    const auto &space = l > 0 ? space1 : space2;
     const int width = space.width();
     const int height = space.height();
 
     // Flip phi on the other side so we don't face the seam
-    if (r < 0)
+    if (l < 0)
     {
         phi += ph0 + PI;
     }
@@ -199,30 +214,30 @@ int trace_geodesic(State &state, float dt, int tmax, float b, const Img &space1,
     {
         rk4_step(state, dt, b);
     }
-    return map_coordinates_to_pixel(state.r, state.th, state.ph, th0, ph0, space1, space2);
+    return map_coordinates_to_pixel(state.l, state.th, state.ph, th0, ph0, space1, space2);
 }
 
 // Makes the initial state for RK4 integration
 void init_state(
-    float r0, float th0, float ph0, float b,
+    float l0, float th0, float ph0, float b,
     float c_r, float c_th, float c_ph,
     State &state)
 {
-    float R = sqrt(r0 * r0 + b * b);
-    float S = fmaxf(sin(th0), 1e-9);
+    float r = r_of_l(l0, b);
+    float st = fmaxf(sin(th0), 1e-9);
 
     // null normalization: choose t' so that k^μ k_μ = 0 → t'^2 = r'^2 + R^2(θ'^2 + sin^2θ φ'^2)
     float vr = c_r;
-    float vth = c_th / R;
-    float vph = c_ph / (R * S);
-    float vt = sqrt(vr * vr + R * R * (vth * vth + (S * S) * vph * vph));
+    float vth = c_th / r;
+    float vph = c_ph / (r * st);
+    float vt = sqrt(vr * vr + r * r * (vth * vth + (st * st) * vph * vph));
 
     state.t = 0.0;
-    state.r = r0;
+    state.l = l0;
     state.th = th0;
     state.ph = ph0;
     state.vt = vt;
-    state.vr = vr;
+    state.vl = vr;
     state.vth = vth;
     state.vph = vph;
 }
@@ -331,7 +346,7 @@ void render_row(
     const Img &space1, const Img &space2, Img &output,
     int W, int H, int row,
     float fov, float b, float dt, float tmax,
-    float r0, float th0, float ph0,
+    float l0, float th0, float ph0,
     float r_ang, float th_ang, float ph_ang,
     int &progress)
 {
@@ -347,7 +362,7 @@ void render_row(
     for (int j = 0; j < W; j++)
     {
         pixel_to_direction(row, j, W, H, fov, e_r, e_th, e_ph, cam_r, cam_th, cam_ph, c_r, c_th, c_ph);
-        init_state(r0, th0, ph0, b, c_r, c_th, c_ph, state);
+        init_state(l0, th0, ph0, b, c_r, c_th, c_ph, state);
         int rgb = trace_geodesic(state, dt, tmax, b, space1, space2);
         output(j, row, 0, 0) = red(rgb);
         output(j, row, 0, 1) = green(rgb);
@@ -372,7 +387,7 @@ int main()
     const float dt = 1e-3;
     const float tmax = 20.0;
 
-    const float r0 = 3;
+    const float l0 = 3;
     const float th0 = PI / 2;
     const float ph0 = 0;
 
@@ -391,7 +406,7 @@ int main()
         pool.enqueue(
             &render_row,
             std::ref(space1), std::ref(space2), std::ref(output),
-            W, H, i, fov, b, dt, tmax, r0, th0, ph0, r_ang, th_ang, ph_ang,
+            W, H, i, fov, b, dt, tmax, l0, th0, ph0, r_ang, th_ang, ph_ang,
             std::ref(progress));
     }
     pool.wait_idle();
