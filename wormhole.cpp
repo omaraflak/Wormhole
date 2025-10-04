@@ -298,29 +298,33 @@ void init_camera_basis(
     cam_ph[1] = e_ph[1];
     cam_ph[2] = e_ph[2];
 
-    float cam_r_x = (cth + cph) * cam_r[0] - sph * cam_th[0] + sth * cam_ph[0];
-    float cam_r_y = (cth + cph) * cam_r[1] - sph * cam_th[1] + sth * cam_ph[1];
-    float cam_r_z = (cth + cph) * cam_r[2] - sph * cam_th[2] + sth * cam_ph[2];
+    // Rotation around cam_ph axis
+    float temp_r[3], temp_th[3];
+    temp_r[0] = cph * cam_r[0] - sph * cam_th[0];
+    temp_r[1] = cph * cam_r[1] - sph * cam_th[1];
+    temp_r[2] = cph * cam_r[2] - sph * cam_th[2];
 
-    float cam_th_x = sph * cam_r[0] + (cr + cph) * cam_th[0] - sr * cam_ph[0];
-    float cam_th_y = sph * cam_r[1] + (cr + cph) * cam_th[1] - sr * cam_ph[1];
-    float cam_th_z = sph * cam_r[2] + (cr + cph) * cam_th[2] - sr * cam_ph[2];
+    temp_th[0] = sph * cam_r[0] + cph * cam_th[0];
+    temp_th[1] = sph * cam_r[1] + cph * cam_th[1];
+    temp_th[2] = sph * cam_r[2] + cph * cam_th[2];
 
-    float cam_ph_x = -sth * cam_r[0] + sr * cam_th[0] + (cth + cr) * cam_ph[0];
-    float cam_ph_y = -sth * cam_r[1] + sr * cam_th[1] + (cth + cr) * cam_ph[1];
-    float cam_ph_z = -sth * cam_r[2] + sr * cam_th[2] + (cth + cr) * cam_ph[2];
+    // Rotation around cam_th axis
+    cam_r[0] = cth * temp_r[0] + sth * cam_ph[0];
+    cam_r[1] = cth * temp_r[1] + sth * cam_ph[1];
+    cam_r[2] = cth * temp_r[2] + sth * cam_ph[2];
 
-    cam_r[0] = cam_r_x;
-    cam_r[1] = cam_r_y;
-    cam_r[2] = cam_r_z;
+    cam_ph[0] = -sth * temp_r[0] + cth * cam_ph[0];
+    cam_ph[1] = -sth * temp_r[1] + cth * cam_ph[1];
+    cam_ph[2] = -sth * temp_r[2] + cth * cam_ph[2];
 
-    cam_th[0] = cam_th_x;
-    cam_th[1] = cam_th_y;
-    cam_th[2] = cam_th_z;
+    // Rotation around cam_r axis
+    cam_th[0] = cr * temp_th[0] - sr * cam_ph[0];
+    cam_th[1] = cr * temp_th[1] - sr * cam_ph[1];
+    cam_th[2] = cr * temp_th[2] - sr * cam_ph[2];
 
-    cam_ph[0] = cam_ph_x;
-    cam_ph[1] = cam_ph_y;
-    cam_ph[2] = cam_ph_z;
+    cam_ph[0] = sr * temp_th[0] + cr * cam_ph[0];
+    cam_ph[1] = sr * temp_th[1] + cr * cam_ph[1];
+    cam_ph[2] = sr * temp_th[2] + cr * cam_ph[2];
 }
 
 void render_row(
