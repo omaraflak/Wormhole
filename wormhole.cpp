@@ -210,10 +210,16 @@ int trace_geodesic(State &state, float dt, int tmax, float b, float L, const Img
 {
     float th0 = state.th;
     float ph0 = state.ph;
-    int steps = (int)(tmax / dt);
-    for (int i = 0; i < steps; i++)
+    while (state.t < tmax)
     {
-        rk4_step(state, dt, b, L);
+        if (abs(state.vph) > 0.3 || abs(state.vth) > 0.6)
+        {
+            rk4_step(state, dt, b, L);
+        }
+        else
+        {
+            rk4_step(state, 0.1, b, L);
+        }
     }
     return map_coordinates_to_pixel(state.l, state.th, state.ph, th0, ph0, space1, space2);
 }
@@ -375,6 +381,28 @@ void render_row(
     printf("%d/%d\n", progress, H);
 }
 
+void render_image(
+    const Img &space1, const Img &space2, std::string filename,
+    ThreadPool &pool,
+    int W, int H,
+    float fov, float b, float L, float dt, float tmax,
+    float l0, float th0, float ph0,
+    float r_ang, float th_ang, float ph_ang)
+{
+    Img output(W, H, 1, 3, 0);
+    int progress = 0;
+    for (int i = 0; i < H; i++)
+    {
+        pool.enqueue(
+            &render_row,
+            std::ref(space1), std::ref(space2), std::ref(output),
+            W, H, i, fov, b, L, dt, tmax, l0, th0, ph0, r_ang, th_ang, ph_ang,
+            std::ref(progress));
+    }
+    pool.wait_idle();
+    output.save_png(filename.c_str());
+}
+
 int main()
 {
     const int W = 160, H = 90;
@@ -384,9 +412,9 @@ int main()
     // const int W = 1920, H = 1080;
     // const int W = 3840, H = 2160;
 
-    const float fov = 60 * PI / 180;
+    const float fov = 120 * PI / 180;
     const float b = 1;
-    const float L = 1;
+    const float L = 3;
     const float dt = 1e-3;
     const float tmax = 20.0;
 
@@ -400,18 +428,10 @@ int main()
 
     Img space1("images/space5.jpg");
     Img space2("images/space6.png");
-    Img output(W, H, 1, 3, 0);
-
     ThreadPool pool(9);
-    int progress = 0;
-    for (int i = 0; i < H; i++)
-    {
-        pool.enqueue(
-            &render_row,
-            std::ref(space1), std::ref(space2), std::ref(output),
-            W, H, i, fov, b, L, dt, tmax, l0, th0, ph0, r_ang, th_ang, ph_ang,
-            std::ref(progress));
-    }
-    pool.wait_idle();
-    output.save_png("wormhole.png");
+
+    render_image(
+        space1, space2, "wormhole.png", pool,
+        W, H, fov, b, L, dt, tmax,
+        l0, th0, ph0, r_ang, th_ang, ph_ang);
 }
