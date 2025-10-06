@@ -431,7 +431,7 @@ int main()
     const float fov = 60 * PI / 180;
     const float b = 1;
     const float L = 4;
-    const float dt = 1e-1; // 1e-3
+    const float dt = 1e-1; // 1e-3 to avoid artefacts
     const float tmax = 20.0;
 
     // relative to world coordinates
