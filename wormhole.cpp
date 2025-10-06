@@ -27,14 +27,12 @@ typedef struct
 
 inline static float r_of_l(float l, float b, float L)
 {
-    return b + L * log(cosh(l / L));
-    // return sqrt(l * l + b * b);
+    return powf(pow(l, L) + pow(b, L), 1 / L);
 }
 
 inline static float r_prime_of_l(float l, float b, float L)
 {
-    return tanh(l / L);
-    // return l / sqrt(l * l + b * b);
+    return powf(pow(l, L) + pow(b, L), 1 / L - 1) * powf(l, L - 1);
 }
 
 // Compute Christoffel symbols
@@ -78,7 +76,7 @@ void rhs(const State &state, float b, float L, State &result)
     float g122, g133, g212, g233, g323;
     christoffels(state.l, b, L, state.th, g122, g133, g212, g233, g323);
 
-    float ar = -g122 * state.vth * state.vth - g133 * state.vph * state.vph;
+    float al = -g122 * state.vth * state.vth - g133 * state.vph * state.vph;
     float ath = -2 * g212 * state.vl * state.vth - g233 * state.vph * state.vph;
     float aph = -2 * g212 * state.vl * state.vph - 2 * g323 * state.vth * state.vph;
 
@@ -87,7 +85,7 @@ void rhs(const State &state, float b, float L, State &result)
     result.th = state.vth;
     result.ph = state.vph;
     result.vt = 0;
-    result.vl = ar;
+    result.vl = al;
     result.vth = ath;
     result.vph = aph;
 }
@@ -355,8 +353,7 @@ void render_row(
     int W, int H, int row,
     float fov, float b, float L, float dt, float tmax,
     float l0, float th0, float ph0,
-    float r_ang, float th_ang, float ph_ang,
-    int &progress)
+    float r_ang, float th_ang, float ph_ang)
 {
     float e_r[3], e_th[3], e_ph[3];
     float cam_r[3], cam_th[3], cam_ph[3];
@@ -376,9 +373,6 @@ void render_row(
         output(j, row, 0, 1) = green(rgb);
         output(j, row, 0, 2) = blue(rgb);
     }
-
-    progress++;
-    printf("%d/%d\n", progress, H);
 }
 
 void render_image(
@@ -390,21 +384,36 @@ void render_image(
     float r_ang, float th_ang, float ph_ang)
 {
     Img output(W, H, 1, 3, 0);
-    int progress = 0;
     for (int i = 0; i < H; i++)
     {
         pool.enqueue(
             &render_row,
             std::ref(space1), std::ref(space2), std::ref(output),
-            W, H, i, fov, b, L, dt, tmax, l0, th0, ph0, r_ang, th_ang, ph_ang,
-            std::ref(progress));
+            W, H, i, fov, b, L, dt, tmax, l0, th0, ph0, r_ang, th_ang, ph_ang);
     }
     pool.wait_idle();
     output.save_png(filename.c_str());
 }
 
+inline static float lerp(float x, float xmin, float xmax, float ymin, float ymax)
+{
+    if (x < xmin)
+    {
+        return ymin;
+    }
+    if (x > xmax)
+    {
+        return ymax;
+    }
+    return ymin + (ymax - ymin) * (x - xmin) / (xmax - xmin);
+}
+
 int main()
 {
+    Img space1("images/space8.jpg");
+    Img space2("images/space5.jpg");
+    ThreadPool pool(9);
+
     const int W = 160, H = 90;
     // const int W = 320, H = 180;
     // const int W = 640, H = 360;
@@ -412,26 +421,38 @@ int main()
     // const int W = 1920, H = 1080;
     // const int W = 3840, H = 2160;
 
-    const float fov = 120 * PI / 180;
+    const float fov = 60 * PI / 180;
     const float b = 1;
-    const float L = 3;
-    const float dt = 1e-3;
+    const float L = 4;
+    const float dt = 1e-1;
     const float tmax = 20.0;
 
-    const float l0 = 3;
+    // relative to world coordinates
+    // const float l0 = 3;
     const float th0 = PI / 2;
-    const float ph0 = 0;
+    // const float ph0 = 0;
 
+    // relative to camera coordinates
     const float r_ang = 0;
-    const float th_ang = 0;
+    // const float th_ang = 0;
     const float ph_ang = 0;
 
-    Img space1("images/space5.jpg");
-    Img space2("images/space6.png");
-    ThreadPool pool(9);
+    const int fps = 24;
+    const int duration = 30;
+    const int frames = fps * duration;
+    const int hframes = frames / 2;
 
-    render_image(
-        space1, space2, "wormhole.png", pool,
-        W, H, fov, b, L, dt, tmax,
-        l0, th0, ph0, r_ang, th_ang, ph_ang);
+    for (int i = 0; i < frames; i++)
+    {
+        float l0 = lerp(i, 0, frames - 1, 3, -3);
+        float ph0 = lerp(i, 0, frames - 1, 0, 4 * PI);
+        float th_ang = lerp(i, hframes - 5 * fps, hframes + 5 * fps, 0, PI);
+
+        std::string filename = "output/wormhole_" + std::to_string(i) + ".png";
+        render_image(
+            space1, space2, filename, pool,
+            W, H, fov, b, L, dt, tmax,
+            l0, th0, ph0, r_ang, th_ang, ph_ang);
+        printf("%d/%d\n", i + 1, frames);
+    }
 }
