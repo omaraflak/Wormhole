@@ -27,12 +27,12 @@ typedef struct
 
 inline static float r_of_l(float l, float b, float L)
 {
-    return powf(pow(l, L) + pow(b, L), 1 / L);
+    return powf(powf(l, L) + powf(b, L), 1 / L);
 }
 
 inline static float r_prime_of_l(float l, float b, float L)
 {
-    return powf(pow(l, L) + pow(b, L), 1 / L - 1) * powf(l, L - 1);
+    return powf(powf(l, L) + powf(b, L), 1 / L - 1) * powf(l, L - 1);
 }
 
 // Compute Christoffel symbols
@@ -427,12 +427,12 @@ int main()
     Img space2("images/space9.jpg");
     ThreadPool pool(9);
 
-    const int W = 160, H = 90;
+    // const int W = 160, H = 90;
     // const int W = 320, H = 180;
     // const int W = 640, H = 360;
     // const int W = 1280, H = 720;
     // const int W = 1920, H = 1080;
-    // const int W = 3840, H = 2160;
+    const int W = 3840, H = 2160;
 
     const float fov = 60 * PI / 180;
     const float b = 1;

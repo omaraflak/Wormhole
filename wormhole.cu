@@ -24,8 +24,7 @@
 #define TWO_PI 6.28318530717958647692f
 #define INV_TWO_PI 0.15915494309189533577f // 1/(2*pi)
 
-__forceinline__ __device__ float
-clampf(float x, float a, float b)
+__forceinline__ __device__ float clampf(float x, float a, float b)
 {
     return fminf(b, fmaxf(a, x));
 }
@@ -43,14 +42,14 @@ struct State
     float vt, vl, vth, vph;
 };
 
-inline static float r_of_l(float l, float b, float L)
+__forceinline__ __device__ float r_of_l(float l, float b, float L)
 {
-    return powf(pow(l, L) + pow(b, L), 1 / L);
+    return powf(powf(l, L) + powf(b, L), 1 / L);
 }
 
-inline static float r_prime_of_l(float l, float b, float L)
+__forceinline__ __device__ float r_prime_of_l(float l, float b, float L)
 {
-    return powf(pow(l, L) + pow(b, L), 1 / L - 1) * powf(l, L - 1);
+    return powf(powf(l, L) + powf(b, L), 1 / L - 1) * powf(l, L - 1);
 }
 
 __forceinline__ __device__ void christoffels(
@@ -281,7 +280,6 @@ __forceinline__ __device__ void init_state(
     float c_r, float c_th, float c_ph,
     State &s)
 {
-
     float r = r_of_l(l0, b, L);
     float st = fmaxf(sinf(th0), 1e-9f);
 
@@ -419,7 +417,7 @@ void trace_wormhole(
     int grid = (N + block - 1) / block;
     grid = min(grid, 65535); // safe cap for many GPUs
 
-    const float fov = 120 * PI / 180;
+    const float fov = 60 * PI / 180;
     const float b = 1;
     const float L = 4;
     const float dt = 1e-3;
