@@ -186,12 +186,6 @@ int map_coordinates_to_pixel(
     const int width = space.width();
     const int height = space.height();
 
-    // Flip phi on the other side so we don't face the seam
-    if (l < 0)
-    {
-        phi += ph0 + PI;
-    }
-
     phi = mod2pi(phi);
     theta = clampf(theta, 0.0, PI);
 
@@ -423,21 +417,21 @@ inline static float aderp(float x, float xmin, float xmax, float ymin, float yma
 
 int main()
 {
-    Img space1("images/space8.jpg");
-    Img space2("images/space9.jpg");
+    Img space1("images/space1.jpg");
+    Img space2("images/space2.jpg");
     ThreadPool pool(9);
 
-    // const int W = 160, H = 90;
+    const int W = 160, H = 90;
     // const int W = 320, H = 180;
     // const int W = 640, H = 360;
     // const int W = 1280, H = 720;
     // const int W = 1920, H = 1080;
-    const int W = 3840, H = 2160;
+    // const int W = 3840, H = 2160;
 
     const float fov = 60 * PI / 180;
     const float b = 1;
     const float L = 4;
-    const float dt = 1e-1;
+    const float dt = 1e-1; // 1e-3
     const float tmax = 20.0;
 
     // relative to world coordinates
