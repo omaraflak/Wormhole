@@ -73,17 +73,18 @@ __forceinline__ __device__ void rhs(const State &s, float b, float L, State &out
     float g122, g133, g212, g233, g323;
     christoffels(s.l, b, L, s.th, g122, g133, g212, g233, g323);
 
-    float vth2 = s.vth * s.vth;
-    float vph2 = s.vph * s.vph;
+    float al = -g122 * s.vth * s.vth - g133 * s.vph * s.vph;
+    float ath = -2 * g212 * s.vl * s.vth - g233 * s.vph * s.vph;
+    float aph = -2 * g212 * s.vl * s.vph - 2 * g323 * s.vth * s.vph;
 
     out.t = s.vt;
     out.l = s.vl;
     out.th = s.vth;
     out.ph = s.vph;
     out.vt = 0;
-    out.vl = -g122 * vth2 - g133 * vph2;
-    out.vth = -2.0f * g212 * s.vl * s.vth - g233 * vph2;
-    out.vph = -2.0f * g212 * s.vl * s.vph - 2.0f * g323 * s.vth * s.vph;
+    out.vl = al;
+    out.vth = ath;
+    out.vph = aph;
 }
 
 __forceinline__ __device__ void rk4_step(State &s, float dt, float b, float L)
