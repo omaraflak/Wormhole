@@ -395,23 +395,36 @@ void render_image(
     output.save_png(filename.c_str());
 }
 
-inline static float lerp(float x, float xmin, float xmax, float ymin, float ymax)
+inline static float clamp_norm(float x, float xmin, float xmax)
 {
     if (x < xmin)
     {
-        return ymin;
+        return 0;
     }
     if (x > xmax)
     {
-        return ymax;
+        return 1;
     }
-    return ymin + (ymax - ymin) * (x - xmin) / (xmax - xmin);
+    return (x - xmin) / (xmax - xmin);
+}
+
+inline static float lerp(float x, float xmin, float xmax, float ymin, float ymax)
+{
+    float n = clamp_norm(x, xmin, xmax);
+    return ymin + n * (ymax - ymin);
+}
+
+inline static float aderp(float x, float xmin, float xmax, float ymin, float ymax)
+{
+    float n = clamp_norm(x, xmin, xmax);
+    float r = (cos((n + 1) * PI) + 1) / 2;
+    return ymin + r * (ymax - ymin);
 }
 
 int main()
 {
     Img space1("images/space8.jpg");
-    Img space2("images/space5.jpg");
+    Img space2("images/space9.jpg");
     ThreadPool pool(9);
 
     const int W = 160, H = 90;
@@ -438,17 +451,17 @@ int main()
     const float ph_ang = 0;
 
     const int fps = 24;
-    const int duration = 30;
+    const int duration = 45;
     const int frames = fps * duration;
     const int hframes = frames / 2;
 
     for (int i = 0; i < frames; i++)
     {
-        float l0 = lerp(i, 0, frames - 1, 3, -3);
-        float ph0 = lerp(i, 0, frames - 1, 0, 4 * PI);
-        float th_ang = lerp(i, hframes - 5 * fps, hframes + 5 * fps, 0, PI);
+        float l0 = aderp(i, 0, frames - 1, 3, -3);
+        float ph0 = aderp(i, 0, frames - 1, 0, 4 * PI);
+        float th_ang = aderp(i, hframes - 8 * fps, hframes + 8 * fps, 0, PI);
 
-        std::string filename = "output/wormhole_" + std::to_string(i) + ".png";
+        std::string filename = "tmp/video7/wormhole_" + std::to_string(i) + ".png";
         render_image(
             space1, space2, filename, pool,
             W, H, fov, b, L, dt, tmax,

@@ -39,116 +39,194 @@ __forceinline__ __device__ float mod2pi(float phi)
 
 struct State
 {
-    float t, r, th, ph;
-    float vt, vr, vth, vph;
+    float t, l, th, ph;
+    float vt, vl, vth, vph;
 };
 
-__forceinline__ __device__ void christoffels(
-    float r, float b, float theta,
-    float &g112, float &g133, float &g212, float &g233, float &g323)
+inline static float r_of_l(float l, float b, float L)
 {
-    float s, c;
-    sincosf(theta, &s, &c);
-    g112 = -r;                  // Γ^r_{θθ}
-    g133 = -r * s * s;          // Γ^r_{φφ}
-    g212 = r / (b * b + r * r); // Γ^θ_{rθ} = Γ^θ_{θr} = Γ^φ_{rφ} = Γ^φ_{φr}
-    g233 = -s * c;              // Γ^θ_{φφ}
-    g323 = c / (s + 1e-12f);    // Γ^φ_{θφ} = Γ^φ_{φθ}
+    return powf(pow(l, L) + pow(b, L), 1 / L);
 }
 
-__forceinline__ __device__ void rhs(const State &s, float b, State &out)
+inline static float r_prime_of_l(float l, float b, float L)
 {
-    float g112, g133, g212, g233, g323;
-    christoffels(s.r, b, s.th, g112, g133, g212, g233, g323);
+    return powf(pow(l, L) + pow(b, L), 1 / L - 1) * powf(l, L - 1);
+}
 
-    const float vt = s.vt, vr = s.vr, vth = s.vth, vph = s.vph;
+__forceinline__ __device__ void christoffels(
+    float l, float b, float L, float theta,
+    float &g122, float &g133, float &g212, float &g233, float &g323)
+{
+    float st, ct;
+    __sincosf(theta, &st, &ct);
 
-    float ar = -g112 * vth * vth - g133 * vph * vph;
-    float ath = -g212 * (vr * vth + vth * vr) - g233 * vph * vph;
-    float aph = -g212 * (vr * vph + vph * vr) - g323 * (vth * vph + vph * vth);
+    float r = r_of_l(l, b, L);
+    float rp = r_prime_of_l(l, b, L);
 
-    out.t = vt;
-    out.r = vr;
-    out.th = vth;
-    out.ph = vph;
-    out.vt = 0.0f;
-    out.vr = ar;
+    // Γ^l_{θθ}
+    g122 = -r * rp;
+
+    // Γ^l_{φφ}
+    g133 = -r * rp * st * st;
+
+    // Γ^θ_{lθ} = Γ^θ_{θl} = Γ^φ_{lφ} = Γ^φ_{φl}
+    g212 = rp / (r + 1e-12);
+
+    // Γ^θ_{φφ}
+    g233 = -st * ct;
+
+    // Γ^φ_{θφ} = Γ^φ_{φθ}
+    g323 = ct / (st + 1e-12);
+}
+
+__forceinline__ __device__ void rhs(const State &s, float b, float L, State &out)
+{
+    float g122, g133, g212, g233, g323;
+    christoffels(s.l, b, L, s.th, g122, g133, g212, g233, g323);
+
+    float al = -g122 * s.vth * s.vth - g133 * s.vph * s.vph;
+    float ath = -2 * g212 * s.vl * s.vth - g233 * s.vph * s.vph;
+    float aph = -2 * g212 * s.vl * s.vph - 2 * g323 * s.vth * s.vph;
+
+    out.t = s.vt;
+    out.l = s.vl;
+    out.th = s.vth;
+    out.ph = s.vph;
+    out.vt = 0;
+    out.vl = al;
     out.vth = ath;
     out.vph = aph;
 }
 
-__forceinline__ __device__ void rk4_step(State &s, float dt, float b)
+__forceinline__ __device__ void rk4_step(State &s, float dt, float b, float L)
 {
     State k1, k2, k3, k4;
     State tmp;
 
-    rhs(s, b, k1);
+    rhs(s, b, L, k1);
 
     tmp.t = __fmaf_rn(0.5f * dt, k1.t, s.t);
-    tmp.r = __fmaf_rn(0.5f * dt, k1.r, s.r);
+    tmp.l = __fmaf_rn(0.5f * dt, k1.l, s.l);
     tmp.th = __fmaf_rn(0.5f * dt, k1.th, s.th);
     tmp.ph = __fmaf_rn(0.5f * dt, k1.ph, s.ph);
     tmp.vt = __fmaf_rn(0.5f * dt, k1.vt, s.vt);
-    tmp.vr = __fmaf_rn(0.5f * dt, k1.vr, s.vr);
+    tmp.vl = __fmaf_rn(0.5f * dt, k1.vl, s.vl);
     tmp.vth = __fmaf_rn(0.5f * dt, k1.vth, s.vth);
     tmp.vph = __fmaf_rn(0.5f * dt, k1.vph, s.vph);
-    rhs(tmp, b, k2);
+    rhs(tmp, b, L, k2);
 
     tmp.t = __fmaf_rn(0.5f * dt, k2.t, s.t);
-    tmp.r = __fmaf_rn(0.5f * dt, k2.r, s.r);
+    tmp.l = __fmaf_rn(0.5f * dt, k2.l, s.l);
     tmp.th = __fmaf_rn(0.5f * dt, k2.th, s.th);
     tmp.ph = __fmaf_rn(0.5f * dt, k2.ph, s.ph);
     tmp.vt = __fmaf_rn(0.5f * dt, k2.vt, s.vt);
-    tmp.vr = __fmaf_rn(0.5f * dt, k2.vr, s.vr);
+    tmp.vl = __fmaf_rn(0.5f * dt, k2.vl, s.vl);
     tmp.vth = __fmaf_rn(0.5f * dt, k2.vth, s.vth);
     tmp.vph = __fmaf_rn(0.5f * dt, k2.vph, s.vph);
-    rhs(tmp, b, k3);
+    rhs(tmp, b, L, k3);
 
     tmp.t = __fmaf_rn(dt, k3.t, s.t);
-    tmp.r = __fmaf_rn(dt, k3.r, s.r);
+    tmp.l = __fmaf_rn(dt, k3.l, s.l);
     tmp.th = __fmaf_rn(dt, k3.th, s.th);
     tmp.ph = __fmaf_rn(dt, k3.ph, s.ph);
     tmp.vt = __fmaf_rn(dt, k3.vt, s.vt);
-    tmp.vr = __fmaf_rn(dt, k3.vr, s.vr);
+    tmp.vl = __fmaf_rn(dt, k3.vl, s.vl);
     tmp.vth = __fmaf_rn(dt, k3.vth, s.vth);
     tmp.vph = __fmaf_rn(dt, k3.vph, s.vph);
-    rhs(tmp, b, k4);
+    rhs(tmp, b, L, k4);
 
     const float w = dt / 6.0f;
     s.t = __fmaf_rn(w, (k1.t + 2.f * k2.t + 2.f * k3.t + k4.t), s.t);
-    s.r = __fmaf_rn(w, (k1.r + 2.f * k2.r + 2.f * k3.r + k4.r), s.r);
+    s.l = __fmaf_rn(w, (k1.l + 2.f * k2.l + 2.f * k3.l + k4.l), s.l);
     s.th = __fmaf_rn(w, (k1.th + 2.f * k2.th + 2.f * k3.th + k4.th), s.th);
     s.ph = __fmaf_rn(w, (k1.ph + 2.f * k2.ph + 2.f * k3.ph + k4.ph), s.ph);
     s.vt = __fmaf_rn(w, (k1.vt + 2.f * k2.vt + 2.f * k3.vt + k4.vt), s.vt);
-    s.vr = __fmaf_rn(w, (k1.vr + 2.f * k2.vr + 2.f * k3.vr + k4.vr), s.vr);
+    s.vl = __fmaf_rn(w, (k1.vl + 2.f * k2.vl + 2.f * k3.vl + k4.vl), s.vl);
     s.vth = __fmaf_rn(w, (k1.vth + 2.f * k2.vth + 2.f * k3.vth + k4.vth), s.vth);
     s.vph = __fmaf_rn(w, (k1.vph + 2.f * k2.vph + 2.f * k3.vph + k4.vph), s.vph);
 }
 
-__forceinline__ __device__ void init_camera_basis(float th0, float ph0, float3 &e_r, float3 &e_th, float3 &e_ph)
+__forceinline__ __device__ void init_world_basis(float th0, float ph0, float3 &e_r, float3 &e_th, float3 &e_ph)
 {
     float st, ct;
     float sp, cp;
-    sincosf(th0, &st, &ct);
-    sincosf(ph0, &sp, &cp);
+    __sincosf(th0, &st, &ct);
+    __sincosf(ph0, &sp, &cp);
     e_r = make_float3(st * cp, st * sp, ct);
     e_th = make_float3(ct * cp, ct * sp, -st);
     e_ph = make_float3(-sp, cp, 0.0f);
 }
 
+__forceinline__ __device__ void init_camera_basis(
+    float3 &e_r, float3 &e_th, float3 &e_ph,
+    float3 &cam_r, float3 &cam_th, float3 &cam_ph,
+    float r_angle, float th_angle, float ph_angle)
+{
+    float sr, cr;
+    float sth, cth;
+    float sph, cph;
+    __sincosf(r_angle, &sr, &cr);
+    __sincosf(th_angle, &sth, &cth);
+    __sincosf(ph_angle, &sph, &cph);
+
+    cam_r.x = -e_r.x;
+    cam_r.y = -e_r.y;
+    cam_r.z = -e_r.z;
+
+    cam_th.x = -e_th.x;
+    cam_th.y = -e_th.y;
+    cam_th.z = -e_th.z;
+
+    cam_ph.x = e_ph.x;
+    cam_ph.y = e_ph.y;
+    cam_ph.z = e_ph.z;
+
+    // Rotation around cam_ph axis
+    float3 temp_r, temp_th;
+    temp_r.x = cph * cam_r.x - sph * cam_th.x;
+    temp_r.y = cph * cam_r.y - sph * cam_th.y;
+    temp_r.z = cph * cam_r.z - sph * cam_th.z;
+
+    temp_th.x = sph * cam_r.x + cph * cam_th.x;
+    temp_th.y = sph * cam_r.y + cph * cam_th.y;
+    temp_th.z = sph * cam_r.z + cph * cam_th.z;
+
+    // Rotation around cam_th axis
+    cam_r.x = cth * temp_r.x + sth * cam_ph.x;
+    cam_r.y = cth * temp_r.y + sth * cam_ph.y;
+    cam_r.z = cth * temp_r.z + sth * cam_ph.z;
+
+    cam_ph.x = -sth * temp_r.x + cth * cam_ph.x;
+    cam_ph.y = -sth * temp_r.y + cth * cam_ph.y;
+    cam_ph.z = -sth * temp_r.z + cth * cam_ph.z;
+
+    // Rotation around cam_r axis
+    cam_th.x = cr * temp_th.x - sr * cam_ph.x;
+    cam_th.y = cr * temp_th.y - sr * cam_ph.y;
+    cam_th.z = cr * temp_th.z - sr * cam_ph.z;
+
+    cam_ph.x = sr * temp_th.x + cr * cam_ph.x;
+    cam_ph.y = sr * temp_th.y + cr * cam_ph.y;
+    cam_ph.z = sr * temp_th.z + cr * cam_ph.z;
+}
+
 __forceinline__ __device__ void pixel_to_direction(
     int i, int j, int W, int H, float tanHalfFov, float aspect,
     const float3 &e_r, const float3 &e_th, const float3 &e_ph,
+    const float3 &cam_r, const float3 &cam_th, const float3 &cam_ph,
     float &c_r, float &c_th, float &c_ph)
 {
-    // pixel to normalized screen offsets (u: right, v: up)
-    float u = ((j + 0.5f) / (float)W - 0.5f) * 2.0f * tanHalfFov;
-    float v = (0.5f - (i + 0.5f) / (float)H) * 2.0f * tanHalfFov * aspect;
+    float height = 2 * tanHalfFov;
+    float width = height * aspect;
+
+    // pixel to normalized screen offsets (u: up, v: right)
+    float u = (1 - 2 * (i + 0.5) / H) * height;
+    float v = (2 * (j + 0.5) / W - 1) * width;
 
     float3 d = make_float3(
-        -e_r.x + u * e_ph.x + v * e_th.x,
-        -e_r.y + u * e_ph.y + v * e_th.y,
-        -e_r.z + u * e_ph.z + v * e_th.z);
+        cam_r.x + u * cam_th.x + v * cam_ph.x,
+        cam_r.y + u * cam_th.y + v * cam_ph.y,
+        cam_r.z + u * cam_th.z + v * cam_ph.z);
 
     float invn = rsqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
     d.x *= invn;
@@ -173,17 +251,18 @@ __forceinline__ __device__
 __forceinline__ __device__
     uint32_t
     map_coordinates_to_pixel(
-        float r, float theta, float phi,
+        float l, float theta, float phi,
         float th0, float ph0,
         const unsigned char *__restrict__ space1, int width1, int height1,
         const unsigned char *__restrict__ space2, int width2, int height2)
 {
-    const unsigned char *__restrict__ space = (r > 0.0f) ? space1 : space2;
-    const int width = (r > 0.0f) ? width1 : width2;
-    const int height = (r > 0.0f) ? height1 : height2;
+    const unsigned char *__restrict__ space = (l > 0.0f) ? space1 : space2;
+    const int width = (l > 0.0f) ? width1 : width2;
+    const int height = (l > 0.0f) ? height1 : height2;
 
-    if (r < 0.0f)
+    if (l < 0.0f)
         phi += ph0 + PI; // flip to avoid seam
+
     phi = mod2pi(phi);
     theta = clampf(theta, 0.0f, PI);
 
@@ -197,37 +276,39 @@ __forceinline__ __device__
 }
 
 __forceinline__ __device__ void init_state(
-    float r0, float th0, float ph0, float b,
+    float l0, float th0, float ph0,
+    float b, float L,
     float c_r, float c_th, float c_ph,
     State &s)
 {
-    float R = sqrtf(r0 * r0 + b * b);
-    float S = fmaxf(sinf(th0), 1e-9f);
 
-    float vr = c_r;
-    float vth = c_th / R;
-    float vph = c_ph / (R * S);
-    float vt = sqrtf(vr * vr + R * R * (vth * vth + (S * S) * vph * vph));
+    float r = r_of_l(l0, b, L);
+    float st = fmaxf(sinf(th0), 1e-9f);
 
-    s = {0.0f, r0, th0, ph0, vt, vr, vth, vph};
+    float vl = c_r;
+    float vth = c_th / r;
+    float vph = c_ph / (r * st);
+    float vt = sqrtf(vl * vl + r * r * (vth * vth + (st * st) * vph * vph));
+
+    s = {0.0f, l0, th0, ph0, vt, vl, vth, vph};
 }
 
 __forceinline__ __device__
     uint32_t
     trace_geodesic(
-        State &s, float dt, float tmax, float b,
+        State &s, float dt, float tmax, float b, float L,
         const unsigned char *__restrict__ space1, int w1, int h1,
         const unsigned char *__restrict__ space2, int w2, int h2)
 {
     const float th0 = s.th;
     const float ph0 = s.ph;
     const int steps = (int)(tmax / dt);
-    for (int i = 0; i < steps; ++i)
+    for (int i = 0; i < steps; i++)
     {
-        rk4_step(s, dt, b);
+        rk4_step(s, dt, b, L);
     }
     return map_coordinates_to_pixel(
-        s.r, s.th, s.ph, th0, ph0,
+        s.l, s.th, s.ph, th0, ph0,
         space1, w1, h1, space2, w2, h2);
 }
 
@@ -241,43 +322,73 @@ __launch_bounds__(BLOCK_DIM, 2)
         unsigned char *__restrict__ output, // 3 bytes per pixel
         int W, int H,
         const unsigned char *__restrict__ space1, int w1, int h1,
-        const unsigned char *__restrict__ space2, int w2, int h2, float ph0)
+        const unsigned char *__restrict__ space2, int w2, int h2,
+        const float fov,
+        const float b,
+        const float L,
+        const float dt,
+        const float tmax,
+        const float l0,
+        const float th0,
+        const float ph0,
+        const float r_ang,
+        const float th_ang,
+        const float ph_ang)
 {
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
     int stride = blockDim.x * gridDim.x;
 
-    const float fov = 120.0f * (float)PI / 180.0f;
-    const float tanHalf = tanf(0.5f * fov);
-    const float aspect = (float)H / (float)W;
+    const float tanHalf = __tanf(0.5f * fov);
+    const float aspect = ((float)W / H);
 
-    const float b = 3.0f;
-    const float dt = 1e-3f;
-    const float tmax = 30.0f;
+    float c_r, c_th, c_ph;
+    State s;
 
-    const float r0 = 10.0f;
-    const float th0 = (float)PI * 0.5f;
-
-    float3 e_r, e_th, e_ph;
-    init_camera_basis(th0, ph0, e_r, e_th, e_ph);
+    float3 e_r, e_th, e_ph, cam_r, cam_th, cam_ph;
+    init_world_basis(th0, ph0, e_r, e_th, e_ph);
+    init_camera_basis(e_r, e_th, e_ph, cam_r, cam_th, cam_ph, r_ang, th_ang, ph_ang);
 
     for (int idx = tid; idx < W * H; idx += stride)
     {
         int i = idx / W;
         int j = idx % W;
 
-        float c_r, c_th, c_ph;
-        pixel_to_direction(i, j, W, H, tanHalf, aspect, e_r, e_th, e_ph, c_r, c_th, c_ph);
+        pixel_to_direction(i, j, W, H, tanHalf, aspect, e_r, e_th, e_ph, cam_r, cam_th, cam_ph, c_r, c_th, c_ph);
+        init_state(l0, th0, ph0, b, L, c_r, c_th, c_ph, s);
 
-        State s;
-        init_state(r0, th0, ph0, b, c_r, c_th, c_ph, s);
-
-        uint32_t pix = trace_geodesic(s, dt, tmax, b, space1, w1, h1, space2, w2, h2);
+        uint32_t pix = trace_geodesic(s, dt, tmax, b, L, space1, w1, h1, space2, w2, h2);
 
         int p = 3 * idx;
         output[p + 0] = (pix >> 16) & 0xFF;
         output[p + 1] = (pix >> 8) & 0xFF;
         output[p + 2] = (pix) & 0xFF;
     }
+}
+
+inline static float clamp_norm(float x, float xmin, float xmax)
+{
+    if (x < xmin)
+    {
+        return 0;
+    }
+    if (x > xmax)
+    {
+        return 1;
+    }
+    return (x - xmin) / (xmax - xmin);
+}
+
+inline static float lerp(float x, float xmin, float xmax, float ymin, float ymax)
+{
+    float n = clamp_norm(x, xmin, xmax);
+    return ymin + n * (ymax - ymin);
+}
+
+inline static float aderp(float x, float xmin, float xmax, float ymin, float ymax)
+{
+    float n = clamp_norm(x, xmin, xmax);
+    float r = (cos((n + 1) * PI) + 1) / 2;
+    return ymin + r * (ymax - ymin);
 }
 
 void trace_wormhole(
@@ -308,22 +419,42 @@ void trace_wormhole(
     int grid = (N + block - 1) / block;
     grid = min(grid, 65535); // safe cap for many GPUs
 
-    const int duration = 30;
+    const float fov = 120 * PI / 180;
+    const float b = 1;
+    const float L = 4;
+    const float dt = 1e-3;
+    const float tmax = 20.0;
+
+    // const float l0 = 3;
+    const float th0 = PI / 2;
+    // const float ph0 = 0;
+
+    const float r_ang = 0;
+    // const float th_ang = 0;
+    const float ph_ang = 0;
+
     const int fps = 30;
-    const int frames = duration * fps;
-    const float start_ph0 = -M_PI / 4;
-    const float end_ph0 = M_PI / 4;
-    const float dph = (end_ph0 - start_ph0) / frames;
+    const int duration = 45;
+    const int frames = fps * duration;
+    const int hframes = frames / 2;
 
     for (int i = 0; i < frames; i++)
     {
-        float ph0 = start_ph0 + i * dph;
-        wormhole_kernel<<<grid, block>>>(d_out, W, H, d_space1, w1, h1, d_space2, w2, h2, ph0);
+        float l0 = aderp(i, 0, frames - 1, 3, -3);
+        float ph0 = aderp(i, 0, frames - 1, 0, 4 * PI);
+        float th_ang = aderp(i, hframes - 8 * fps, hframes + 8 * fps, 0, PI);
+
+        wormhole_kernel<<<grid, block>>>(
+            d_out, W, H, d_space1, w1, h1, d_space2, w2, h2,
+            fov, b, L, dt, tmax,
+            l0, th0, ph0,
+            r_ang, th_ang, ph_ang);
+
         CUDA_CHECK(cudaPeekAtLastError());
         CUDA_CHECK(cudaDeviceSynchronize());
         CUDA_CHECK(cudaMemcpy(output, d_out, out_size, cudaMemcpyDeviceToHost));
 
-        std::string filename = "output/wormhole_" + std::to_string(i) + ".png";
+        std::string filename = "/content/drive/MyDrive/output/wormhole_" + std::to_string(i) + ".png";
         int ok = stbi_write_png(filename.c_str(), W, H, 3, output, W * 3);
         if (ok)
             std::cout << i << "/" << frames << std::endl;
@@ -343,8 +474,8 @@ int main()
 
     // Load as 3-channel RGB
     int comp1 = 0, comp2 = 0;
-    unsigned char *space1 = stbi_load("space5.jpg", &w1, &h1, &comp1, 3);
-    unsigned char *space2 = stbi_load("space1.jpg", &w2, &h2, &comp2, 3);
+    unsigned char *space1 = stbi_load("space8.jpg", &w1, &h1, &comp1, 3);
+    unsigned char *space2 = stbi_load("space9.jpg", &w2, &h2, &comp2, 3);
 
     if (!space1 || !space2)
     {
