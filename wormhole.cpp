@@ -204,13 +204,18 @@ int trace_geodesic(State &state, float dt, int tmax, float b, float L, const Img
     float ph0 = state.ph;
     while (state.t < tmax)
     {
-        if (abs(state.vph) > 0.3 || abs(state.vth) > 0.6)
+        if (fabsf(state.vph) > 0.3 || fabsf(state.vth) > 0.6)
         {
             rk4_step(state, dt, b, L);
         }
         else
         {
             rk4_step(state, 0.1, b, L);
+        }
+
+        if (fabsf(state.l) > 4)
+        {
+            break;
         }
     }
     return map_coordinates_to_pixel(state.l, state.th, state.ph, th0, ph0, space1, space2);

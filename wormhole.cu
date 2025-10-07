@@ -277,6 +277,10 @@ __forceinline__ __device__ uchar3 trace_geodesic(
     for (int i = 0; i < steps; i++)
     {
         rk4_step(s, dt, b, L);
+        if (s.l * s.l > 16)
+        {
+            break;
+        }
     }
 
     return map_coordinates_to_pixel(s.l, s.th, s.ph, th0, ph0, space1, w1, h1, space2, w2, h2);
