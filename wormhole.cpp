@@ -320,13 +320,13 @@ void init_camera_basis(
 
     // Rotation around cam_ph axis
     float temp_r[3], temp_th[3];
-    temp_r[0] = cph * cam_r[0] - sph * cam_th[0];
-    temp_r[1] = cph * cam_r[1] - sph * cam_th[1];
-    temp_r[2] = cph * cam_r[2] - sph * cam_th[2];
+    temp_r[0] = cph * cam_r[0] + sph * cam_th[0];
+    temp_r[1] = cph * cam_r[1] + sph * cam_th[1];
+    temp_r[2] = cph * cam_r[2] + sph * cam_th[2];
 
-    temp_th[0] = sph * cam_r[0] + cph * cam_th[0];
-    temp_th[1] = sph * cam_r[1] + cph * cam_th[1];
-    temp_th[2] = sph * cam_r[2] + cph * cam_th[2];
+    temp_th[0] = sph * cam_r[0] - cph * cam_th[0];
+    temp_th[1] = sph * cam_r[1] - cph * cam_th[1];
+    temp_th[2] = sph * cam_r[2] - cph * cam_th[2];
 
     // Rotation around cam_th axis
     cam_r[0] = cth * temp_r[0] + sth * cam_ph[0];
