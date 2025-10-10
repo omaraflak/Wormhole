@@ -163,14 +163,14 @@ __forceinline__ __device__ void init_camera_basis(
 
     // Rotation around cam_ph axis
     float3 temp_r = make_float3(
-        cph * cam_r.x - sph * cam_th.x,
-        cph * cam_r.y - sph * cam_th.y,
-        cph * cam_r.z - sph * cam_th.z);
+        cph * cam_r.x + sph * cam_th.x,
+        cph * cam_r.y + sph * cam_th.y,
+        cph * cam_r.z + sph * cam_th.z);
 
     float3 temp_th = make_float3(
-        sph * cam_r.x + cph * cam_th.x,
-        sph * cam_r.y + cph * cam_th.y,
-        sph * cam_r.z + cph * cam_th.z);
+        sph * cam_r.x - cph * cam_th.x,
+        sph * cam_r.y - cph * cam_th.y,
+        sph * cam_r.z - cph * cam_th.z);
 
     // Rotation around cam_th axis
     cam_r = make_float3(
